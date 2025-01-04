@@ -26,3 +26,94 @@ public class KafkaTransactionListener {
 kafka:
   topic:
     transactions: "transaction-topic"
+
+    spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driverClassName: org.h2.Driver
+    username: sa
+    password:
+    platform: h2
+  h2:
+    console:
+      enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+import javax.persistence.*;
+import java.math.BigDecimal;
+
+@Entity
+public class TransactionRecord {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "sender_id")
+    private User sender;
+
+    @ManyToOne
+    @JoinColumn(name = "recipient_id")
+    private User recipient;
+
+    private BigDecimal amount;
+
+    private boolean valid;
+
+    // Getters and setters
+}
+@Entity
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String username;
+
+    private BigDecimal balance;
+
+    // Getters and setters
+}
+@Service
+public class TransactionService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private TransactionRepository transactionRepository;
+
+    public void processTransaction(Transaction transaction) {
+        // Fetch the sender and recipient users from the database
+        User sender = userRepository.findById(transaction.getSenderId()).orElseThrow();
+        User recipient = userRepository.findById(transaction.getRecipientId()).orElseThrow();
+
+        // Validate transaction conditions
+        if (sender != null && recipient != null &&
+            sender.getBalance().compareTo(transaction.getAmount()) >= 0) {
+
+            // Create a new TransactionRecord entity
+            TransactionRecord transactionRecord = new TransactionRecord();
+            transactionRecord.setSender(sender);
+            transactionRecord.setRecipient(recipient);
+            transactionRecord.setAmount(transaction.getAmount());
+            transactionRecord.setValid(true);
+
+            // Update balances
+            sender.setBalance(sender.getBalance().subtract(transaction.getAmount()));
+            recipient.setBalance(recipient.getBalance().add(transaction.getAmount()));
+
+            // Save transaction record to the database
+            transactionRepository.save(transactionRecord);
+
+            // Save updated user data
+            userRepository.save(sender);
+            userRepository.save(recipient);
+        }
+    }
+}
+
